@@ -1,4 +1,5 @@
 import { FetcherResponse, AggregatedFetcherResponse } from "./types";
+import { type PendingPriceReview } from "../priceReviewService";
 export declare class MarketRateService {
     private fetchers;
     private cache;
@@ -12,6 +13,9 @@ export declare class MarketRateService {
     getSupportedCurrencies(): string[];
     getLatestPrices(): Promise<AggregatedFetcherResponse>;
     clearCache(): void;
+    getPendingReviews(): Promise<PendingPriceReview[]>;
+    approvePendingReview(reviewId: number, reviewedBy?: string, reviewNotes?: string): Promise<PendingPriceReview>;
+    rejectPendingReview(reviewId: number, reviewedBy?: string, reviewNotes?: string): Promise<PendingPriceReview>;
     getCacheStatus(): Record<string, {
         cached: boolean;
         expiry?: Date;

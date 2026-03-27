@@ -2,7 +2,7 @@
  * Unit tests for calculateAverage
  * Run with: npx tsx test/calculateAverage.test.ts
  */
-import { calculateAverage } from '../src/services/marketRate/types.js';
+import { calculateAverage, calculateWeightedAverage } from '../src/services/marketRate/types.js';
 
 let passed = 0;
 let failed = 0;
@@ -55,6 +55,26 @@ assert(
 
 // 7. Zero included
 assert('prices with zero [0, 300] → 150', calculateAverage([0, 300]), 150);
+
+// 8. Weighted average prefers trusted values over new values
+assert(
+  'weighted average uses trust tiers',
+  calculateWeightedAverage([
+    { value: 100, trustLevel: 'new' },
+    { value: 200, trustLevel: 'trusted' },
+  ]),
+  175,
+);
+
+// 9. Explicit weight overrides trust tier
+assert(
+  'weighted average uses explicit weight override',
+  calculateWeightedAverage([
+    { value: 100, trustLevel: 'trusted', weight: 1 },
+    { value: 200, trustLevel: 'new', weight: 3 },
+  ]),
+  175,
+);
 
 console.log(`\n📊 Results: ${passed} passed, ${failed} failed\n`);
 

@@ -5,6 +5,7 @@ import {
   RateSource,
   RateFetchError,
   calculateMedian,
+  filterOutliers,
 } from "./types";
 
 /**
@@ -356,7 +357,12 @@ export class KESRateFetcher implements MarketRateFetcher {
    * Returns all successful rates to calculate median
    */
   private async fetchFromBinance(): Promise<MarketRate | null> {
-    const prices: { rate: number; timestamp: Date; source: string }[] = [];
+    const prices: {
+      rate: number;
+      timestamp: Date;
+      source: string;
+      trustLevel: SourceTrustLevel;
+    }[] = [];
 
     // Strategy 1: Direct XLMKES pair
     try {
@@ -366,6 +372,7 @@ export class KESRateFetcher implements MarketRateFetcher {
           rate: directRate.rate,
           timestamp: directRate.timestamp,
           source: "Binance Spot (XLMKES)",
+          trustLevel: "standard",
         });
       }
     } catch (error) {
@@ -380,6 +387,7 @@ export class KESRateFetcher implements MarketRateFetcher {
           rate: p2pRate.rate,
           timestamp: p2pRate.timestamp,
           source: p2pRate.source,
+          trustLevel: "new",
         });
       }
     } catch (error) {
@@ -394,6 +402,7 @@ export class KESRateFetcher implements MarketRateFetcher {
           rate: xlmUsdRate.rate * APPROXIMATE_KES_USD_RATE,
           timestamp: xlmUsdRate.timestamp,
           source: "Binance Spot (XLMUSDT × KES/USD)",
+          trustLevel: "new",
         });
       }
     } catch (error) {
@@ -405,8 +414,9 @@ export class KESRateFetcher implements MarketRateFetcher {
       return null;
     }
 
-    // Calculate median rate from all sources
-    const rateValues = prices.map((p) => p.rate);
+    // Calculate median rate from all sources (with outlier filtering)
+    let rateValues = prices.map((p) => p.rate).filter(p => p > 0);
+    rateValues = filterOutliers(rateValues);
     const medianRate = calculateMedian(rateValues);
 
     // Return the median with the most recent timestamp
@@ -418,9 +428,9 @@ export class KESRateFetcher implements MarketRateFetcher {
 
     return {
       currency: "KES",
-      rate: medianRate,
+      rate: weightedRate,
       timestamp: mostRecentTimestamp,
-      source: `Binance (Median of ${prices.length} sources)`,
+      source: `Binance (Median of ${prices.length} sources, outliers filtered)`,
     };
   }
 

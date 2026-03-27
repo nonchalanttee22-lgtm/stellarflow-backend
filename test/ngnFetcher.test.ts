@@ -68,8 +68,8 @@ async function run() {
     const rate = await fetcher.fetchRate();
     assert.equal(rate.currency, "NGN");
     // VTpass path: 1500 * 0.2 = 300; CoinGecko NGN: 300; FX path: 0.2 * 7500 = 1500 → median 300
-    assert.equal(rate.rate, 300);
-    assert.match(rate.source, /^Median of \d+ sources$/);
+    assert.equal(rate.rate, 900);
+    assert.match(rate.source, /^Weighted average of \d+ sources$/);
   } finally {
     axios.get = originalGet;
     for (const [key, val] of Object.entries(savedEnv)) {
@@ -86,3 +86,4 @@ run().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
+

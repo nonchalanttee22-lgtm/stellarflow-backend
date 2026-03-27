@@ -7,6 +7,13 @@ export interface MarketRate {
     rate: number;
     timestamp: Date;
     source: string;
+    manualReviewRequired?: boolean;
+    reviewId?: number;
+    reviewReason?: string;
+    reviewChangePercent?: number;
+    comparisonRate?: number;
+    comparisonTimestamp?: Date;
+    contractSubmissionSkipped?: boolean;
 }
 /**
  * Market Rate Fetcher Interface

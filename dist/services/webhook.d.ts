@@ -10,7 +10,19 @@ export declare class WebhookService {
         pricePair: string;
         timestamp: Date;
     }): Promise<void>;
-    private formatMessage;
+    sendManualReviewNotification(reviewDetails: {
+        reviewId: number;
+        currency: string;
+        rate: number;
+        previousRate: number;
+        changePercent: number;
+        source: string;
+        timestamp: Date;
+        reason: string;
+    }): Promise<void>;
+    private postMessage;
+    private formatErrorMessage;
+    private formatReviewMessage;
 }
 export declare const webhookService: WebhookService;
 //# sourceMappingURL=webhook.d.ts.map
