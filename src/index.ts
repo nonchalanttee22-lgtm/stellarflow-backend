@@ -17,9 +17,13 @@ import { SorobanEventListener } from "./services/sorobanEventListener";
 import { specs } from "./lib/swagger";
 import { multiSigSubmissionService } from "./services/multiSigSubmissionService";
 import { apiKeyMiddleware } from "./middleware/apiKeyMiddleware";
+import { validateEnv } from "./utils/envValidator";
 
 // Load environment variables
 dotenv.config();
+
+// [OPS] Implement "Environment Variable" Check on Start
+validateEnv();
 
 // Validate required environment variables
 const requiredEnvVars = ["STELLAR_SECRET", "DATABASE_URL"] as const;
