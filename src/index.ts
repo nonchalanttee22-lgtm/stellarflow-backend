@@ -10,6 +10,7 @@ import historyRouter from "./routes/history";
 import statsRouter from "./routes/stats";
 import intelligenceRouter from "./routes/intelligence";
 import priceUpdatesRouter from "./routes/priceUpdates";
+import assetsRouter from "./routes/assets";
 import prisma from "./lib/prisma";
 import { initSocket } from "./lib/socket";
 import { SorobanEventListener } from "./services/sorobanEventListener";
@@ -107,6 +108,7 @@ app.use("/api/history", historyRouter);
 app.use("/api/stats", statsRouter);
 app.use("/api/intelligence", intelligenceRouter);
 app.use("/api/price-updates", priceUpdatesRouter);
+app.use("/api/assets", assetsRouter);
 
 // Health check endpoint
 /**
