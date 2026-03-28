@@ -18,6 +18,7 @@ import { specs } from "./lib/swagger";
 import { multiSigSubmissionService } from "./services/multiSigSubmissionService";
 import { apiKeyMiddleware } from "./middleware/apiKeyMiddleware";
 import { validateEnv } from "./utils/envValidator";
+import { hourlyAverageService } from "./services/hourlyAverageService";
 
 // Load environment variables
 dotenv.config();
@@ -299,6 +300,7 @@ const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
   try {
     sorobanEventListener?.stop();
     multiSigSubmissionService.stop();
+    hourlyAverageService.stop();
 
     await closeHttpServer();
     console.log("HTTP server closed.");
@@ -366,6 +368,19 @@ httpServer.listen(PORT, () => {
         err instanceof Error ? err.message : err
       );
     }
+  }
+
+  // Start background hourly average job
+  try {
+    hourlyAverageService.start().catch((err: Error) => {
+      console.error("Failed to start hourly average service:", err);
+    });
+    console.log(`📊 Hourly average service started`);
+  } catch (err) {
+    console.warn(
+      "Hourly average service not started:",
+      err instanceof Error ? err.message : err
+    );
   }
 });
 
