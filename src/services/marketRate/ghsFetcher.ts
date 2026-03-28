@@ -2,6 +2,7 @@ import axios from "axios";
 import { MarketRateFetcher, MarketRate, calculateMedian, filterOutliers, SourceTrustLevel, calculateWeightedAverage } from "./types";
 import { errorTracker } from "../errorTracker";
 import { webhookService } from "../webhook";
+import { withRetry } from "../../utils/retryUtil.js";
 
 type CoinGeckoPriceResponse = {
   stellar?: {
@@ -39,14 +40,17 @@ export class GHSRateFetcher implements MarketRateFetcher {
 
     // Strategy 1: Try CoinGecko direct GHS price
     try {
-      const coinGeckoResponse = await axios.get<CoinGeckoPriceResponse>(
-        this.coinGeckoUrl,
-        {
-          timeout: 10000,
-          headers: {
-            "User-Agent": "StellarFlow-Oracle/1.0",
+      const coinGeckoResponse = await withRetry(
+        () => axios.get<CoinGeckoPriceResponse>(
+          this.coinGeckoUrl,
+          {
+            timeout: 10000,
+            headers: {
+              "User-Agent": "StellarFlow-Oracle/1.0",
+            },
           },
-        },
+        ),
+        { maxRetries: 3, retryDelay: 1000 }
       );
 
       const stellarPrice = coinGeckoResponse.data.stellar;
@@ -75,14 +79,17 @@ export class GHSRateFetcher implements MarketRateFetcher {
 
     // Strategy 2: CoinGecko XLM/USD + ExchangeRate API
     try {
-      const coinGeckoResponse = await axios.get<CoinGeckoPriceResponse>(
-        this.coinGeckoUrl,
-        {
-          timeout: 10000,
-          headers: {
-            "User-Agent": "StellarFlow-Oracle/1.0",
+      const coinGeckoResponse = await withRetry(
+        () => axios.get<CoinGeckoPriceResponse>(
+          this.coinGeckoUrl,
+          {
+            timeout: 10000,
+            headers: {
+              "User-Agent": "StellarFlow-Oracle/1.0",
+            },
           },
-        },
+        ),
+        { maxRetries: 3, retryDelay: 1000 }
       );
 
       const stellarPrice = coinGeckoResponse.data.stellar;
@@ -91,14 +98,17 @@ export class GHSRateFetcher implements MarketRateFetcher {
         typeof stellarPrice.usd === "number" &&
         stellarPrice.usd > 0
       ) {
-        const exchangeRateResponse = await axios.get<ExchangeRateApiResponse>(
-          this.usdToGhsUrl,
-          {
-            timeout: 10000,
-            headers: {
-              "User-Agent": "StellarFlow-Oracle/1.0",
+        const exchangeRateResponse = await withRetry(
+          () => axios.get<ExchangeRateApiResponse>(
+            this.usdToGhsUrl,
+            {
+              timeout: 10000,
+              headers: {
+                "User-Agent": "StellarFlow-Oracle/1.0",
+              },
             },
-          },
+          ),
+          { maxRetries: 3, retryDelay: 1000 }
         );
 
         const usdToGhsRate = exchangeRateResponse.data.rates?.GHS;
@@ -134,24 +144,30 @@ export class GHSRateFetcher implements MarketRateFetcher {
     try {
       const alternativeUrl =
         "https://api.coingecko.com/api/v3/simple/price?ids=stellar&vs_currencies=usd";
-      const altResponse = await axios.get(alternativeUrl, {
-        timeout: 10000,
-        headers: {
-          "User-Agent": "StellarFlow-Oracle/1.0",
-        },
-      });
+      const altResponse = await withRetry(
+        () => axios.get(alternativeUrl, {
+          timeout: 10000,
+          headers: {
+            "User-Agent": "StellarFlow-Oracle/1.0",
+          },
+        }),
+        { maxRetries: 3, retryDelay: 1000 }
+      );
 
       if (altResponse.data?.stellar?.usd) {
         const xlmUsd = parseFloat(altResponse.data.stellar.usd);
         if (!isNaN(xlmUsd) && xlmUsd > 0) {
-          const ghsResponse = await axios.get<ExchangeRateApiResponse>(
-            this.usdToGhsUrl,
-            {
-              timeout: 10000,
-              headers: {
-                "User-Agent": "StellarFlow-Oracle/1.0",
+          const ghsResponse = await withRetry(
+            () => axios.get<ExchangeRateApiResponse>(
+              this.usdToGhsUrl,
+              {
+                timeout: 10000,
+                headers: {
+                  "User-Agent": "StellarFlow-Oracle/1.0",
+                },
               },
-            },
+            ),
+            { maxRetries: 3, retryDelay: 1000 }
           );
 
           const ghsRate = ghsResponse.data.rates?.GHS;
