@@ -1,7 +1,8 @@
 import axios from "axios";
-import { calculateMedian, filterOutliers } from "./types";
+import { calculateMedian, filterOutliers, calculateWeightedAverage } from "./types";
 import { errorTracker } from "../errorTracker";
 import { webhookService } from "../webhook";
+import { withRetry } from "../../utils/retryUtil.js";
 export class GHSRateFetcher {
     coinGeckoUrl = "https://api.coingecko.com/api/v3/simple/price?ids=stellar&vs_currencies=ghs,usd&include_last_updated_at=true";
     usdToGhsUrl = "https://open.er-api.com/v6/latest/USD";
@@ -12,12 +13,12 @@ export class GHSRateFetcher {
         const prices = [];
         // Strategy 1: Try CoinGecko direct GHS price
         try {
-            const coinGeckoResponse = await axios.get(this.coinGeckoUrl, {
+            const coinGeckoResponse = await withRetry(() => axios.get(this.coinGeckoUrl, {
                 timeout: 10000,
                 headers: {
                     "User-Agent": "StellarFlow-Oracle/1.0",
                 },
-            });
+            }), { maxRetries: 3, retryDelay: 1000 });
             const stellarPrice = coinGeckoResponse.data.stellar;
             if (stellarPrice &&
                 typeof stellarPrice.ghs === "number" &&
@@ -40,22 +41,22 @@ export class GHSRateFetcher {
         }
         // Strategy 2: CoinGecko XLM/USD + ExchangeRate API
         try {
-            const coinGeckoResponse = await axios.get(this.coinGeckoUrl, {
+            const coinGeckoResponse = await withRetry(() => axios.get(this.coinGeckoUrl, {
                 timeout: 10000,
                 headers: {
                     "User-Agent": "StellarFlow-Oracle/1.0",
                 },
-            });
+            }), { maxRetries: 3, retryDelay: 1000 });
             const stellarPrice = coinGeckoResponse.data.stellar;
             if (stellarPrice &&
                 typeof stellarPrice.usd === "number" &&
                 stellarPrice.usd > 0) {
-                const exchangeRateResponse = await axios.get(this.usdToGhsUrl, {
+                const exchangeRateResponse = await withRetry(() => axios.get(this.usdToGhsUrl, {
                     timeout: 10000,
                     headers: {
                         "User-Agent": "StellarFlow-Oracle/1.0",
                     },
-                });
+                }), { maxRetries: 3, retryDelay: 1000 });
                 const usdToGhsRate = exchangeRateResponse.data.rates?.GHS;
                 if (exchangeRateResponse.data.result === "success" &&
                     typeof usdToGhsRate === "number" &&
@@ -83,21 +84,21 @@ export class GHSRateFetcher {
         // Strategy 3: Try alternative XLM pricing source
         try {
             const alternativeUrl = "https://api.coingecko.com/api/v3/simple/price?ids=stellar&vs_currencies=usd";
-            const altResponse = await axios.get(alternativeUrl, {
+            const altResponse = await withRetry(() => axios.get(alternativeUrl, {
                 timeout: 10000,
                 headers: {
                     "User-Agent": "StellarFlow-Oracle/1.0",
                 },
-            });
+            }), { maxRetries: 3, retryDelay: 1000 });
             if (altResponse.data?.stellar?.usd) {
                 const xlmUsd = parseFloat(altResponse.data.stellar.usd);
                 if (!isNaN(xlmUsd) && xlmUsd > 0) {
-                    const ghsResponse = await axios.get(this.usdToGhsUrl, {
+                    const ghsResponse = await withRetry(() => axios.get(this.usdToGhsUrl, {
                         timeout: 10000,
                         headers: {
                             "User-Agent": "StellarFlow-Oracle/1.0",
                         },
-                    });
+                    }), { maxRetries: 3, retryDelay: 1000 });
                     const ghsRate = ghsResponse.data.rates?.GHS;
                     if (ghsResponse.data.result === "success" &&
                         typeof ghsRate === "number" &&
@@ -123,11 +124,15 @@ export class GHSRateFetcher {
             rateValues = filterOutliers(rateValues);
             const medianRate = calculateMedian(rateValues);
             const mostRecentTimestamp = prices.reduce((latest, p) => (p.timestamp > latest ? p.timestamp : latest), prices[0]?.timestamp ?? new Date());
+            const weightedRate = calculateWeightedAverage(prices.map((p) => ({
+                value: p.rate,
+                trustLevel: p.trustLevel,
+            })));
             return {
                 currency: "GHS",
                 rate: weightedRate,
                 timestamp: mostRecentTimestamp,
-                source: `Median of ${prices.length} sources (outliers filtered)`,
+                source: `Weighted average of ${prices.length} sources (outliers filtered)`,
             };
         }
         // All strategies failed - track failure and send notification if 3 consecutive failures

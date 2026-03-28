@@ -4,13 +4,19 @@ import cors from "cors";
 import dotenv from "dotenv";
 import morgan from "morgan";
 import { Horizon } from "@stellar/stellar-sdk";
+import swaggerUi from "swagger-ui-express";
 import marketRatesRouter from "./routes/marketRates";
 import historyRouter from "./routes/history";
+import statsRouter from "./routes/stats";
+import intelligenceRouter from "./routes/intelligence";
 import priceUpdatesRouter from "./routes/priceUpdates";
+import assetsRouter from "./routes/assets";
 import prisma from "./lib/prisma";
 import { initSocket } from "./lib/socket";
 import { SorobanEventListener } from "./services/sorobanEventListener";
+import { specs } from "./lib/swagger";
 import { multiSigSubmissionService } from "./services/multiSigSubmissionService";
+import { apiKeyMiddleware } from "./middleware/apiKeyMiddleware";
 // Load environment variables
 dotenv.config();
 // Validate required environment variables
@@ -27,6 +33,11 @@ if (missingEnvVars.length > 0) {
     console.error("\nPlease set these variables in your .env file and restart the server.");
     process.exit(1);
 }
+const dashboardUrl = process.env.DASHBOARD_URL || process.env.FRONTEND_URL || "http://localhost:3000";
+if (!dashboardUrl) {
+    console.error("❌ Missing required environment variable: DASHBOARD_URL");
+    process.exit(1);
+}
 const app = express();
 const PORT = process.env.PORT || 3000;
 // Horizon server for health checks
@@ -37,13 +48,77 @@ const horizonUrl = stellarNetwork === "PUBLIC"
 const horizonServer = new Horizon.Server(horizonUrl);
 // Middleware
 app.use(morgan("dev"));
-app.use(cors());
+app.use(cors({
+    origin: (origin, callback) => {
+        // Allow non-browser requests (e.g. curl, server-to-server)
+        if (!origin) {
+            return callback(null, true);
+        }
+        if (origin === dashboardUrl) {
+            return callback(null, true);
+        }
+        return callback(new Error(`CORS policy: Access denied from origin ${origin}. Allowed origin: ${dashboardUrl}`));
+    },
+    credentials: true,
+}));
 app.use(express.json());
+// Swagger documentation
+app.use("/api/docs", swaggerUi.serve);
+app.get("/api/docs", swaggerUi.setup(specs, {
+    swaggerOptions: {
+        persistAuthorization: true,
+    },
+    customCss: `
+    .topbar { display: none; }
+    .swagger-ui .api-info { margin-bottom: 20px; }
+  `,
+    customSiteTitle: "StellarFlow API Documentation",
+}));
+// Apply API Key Middleware to all /api routes
+app.use("/api", apiKeyMiddleware);
 // Routes
 app.use("/api/market-rates", marketRatesRouter);
 app.use("/api/history", historyRouter);
+app.use("/api/stats", statsRouter);
+app.use("/api/intelligence", intelligenceRouter);
 app.use("/api/price-updates", priceUpdatesRouter);
+app.use("/api/assets", assetsRouter);
 // Health check endpoint
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     tags:
+ *       - Health
+ *     summary: System health check
+ *     description: Check the health status of the backend including database and Stellar Horizon connectivity
+ *     responses:
+ *       '200':
+ *         description: All systems operational
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: All systems operational
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                 checks:
+ *                   type: object
+ *                   properties:
+ *                     database:
+ *                       type: boolean
+ *                     horizon:
+ *                       type: boolean
+ *       '503':
+ *         description: One or more services unavailable
+ */
 app.get("/health", async (req, res) => {
     const checks = {
         database: false,
@@ -76,6 +151,34 @@ app.get("/health", async (req, res) => {
     });
 });
 // Root endpoint
+/**
+ * @swagger
+ * /:
+ *   get:
+ *     tags:
+ *       - Health
+ *     summary: API root endpoint
+ *     description: Get information about available API endpoints
+ *     responses:
+ *       '200':
+ *         description: API information with available endpoints
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: StellarFlow Backend API
+ *                 version:
+ *                   type: string
+ *                   example: 1.0.0
+ *                 endpoints:
+ *                   type: object
+ */
 app.get("/", (req, res) => {
     res.json({
         success: true,
@@ -90,6 +193,12 @@ app.get("/", (req, res) => {
                 currencies: "/api/market-rates/currencies",
                 cache: "/api/market-rates/cache",
                 clearCache: "POST /api/market-rates/cache/clear",
+            },
+            stats: {
+                volume: "/api/stats/volume?date=YYYY-MM-DD",
+            },
+            history: {
+                assetHistory: "/api/history/:asset?range=1d|7d|30d|90d",
             },
         },
     });
@@ -115,6 +224,7 @@ initSocket(httpServer);
 httpServer.listen(PORT, () => {
     console.log(`🌊 StellarFlow Backend running on port ${PORT}`);
     console.log(`📊 Market Rates API available at http://localhost:${PORT}/api/market-rates`);
+    console.log(`📚 API Documentation available at http://localhost:${PORT}/api/docs`);
     console.log(`🏥 Health check at http://localhost:${PORT}/health`);
     console.log(`🔌 Socket.io ready for dashboard connections`);
     // Start Soroban event listener to track confirmed on-chain prices
